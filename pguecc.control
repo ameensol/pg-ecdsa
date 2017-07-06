@@ -1,0 +1,5 @@
+# pguecc extension
+comment = 'uECC bindings for Postgres'
+default_version = '1.0'
+module_pathname = '$libdir/pguecc'
+relocatable = true
