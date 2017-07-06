@@ -11,6 +11,200 @@ be included in the Postgres distribution (it's generally included by default;
 if not, the error will mention "could not open extension control file
 ".../pgcrypto.control").
 
+
+Usage
+=====
+
+Use with::
+
+    > CREATE EXTENSION pgcrypto;
+    CREATE EXTENSION;
+    > CREATE EXTENSION pguecc;
+    CREATE EXTENSION;
+    > SELECT ecdsa_sign('000000000000000000000000000000000000000000', '1234', 'sha256', 'secp160r1');
+                     ecdsa_sign
+    --------------------------------------------
+     \xea2eae6ccfee78f0ac8d2d8775e3853f7ac50def
+    (1 row)
+
+
+API
+===
+
+Public API
+----------
+
+``ecdsa_sign(private_key text|bytea, input_data bytea, hash_func text, curve_name text)``
+.........................................................................................
+
+Signs ``hash_func(input_data)``  using ``private_key``.
+
+If ``private_key`` is ``text``, then it's assumed to be a hex string (ie,
+``decode(private_key, 'hex')`` is called).
+
+Throws an error if ``curve_name`` is not valid (see ``ecdsa_is_valid_curve(curve_name)``).
+
+Throws an error if ``private_key`` is not valid (see ``ecdsa_is_valid_public_key(public_key)``).
+
+The ``input_data`` are hashed using ``hash_func`` (ex, ``sha1`` or
+``sha256``) before being passed to ``ecdsa_sign_raw``.
+
+Equivalent to::
+
+    ecdsa_sign_raw(
+        decode(private_key, 'hex'),
+        digest(input_data, hash_func),
+        curve_name
+    )
+
+For example::
+
+    postgres=# select ecdsa_sign('000000000000000000000000000000000000000000', '1234', 'sha256', 'secp160r1');
+                                        ecdsa_sign                                    
+    ----------------------------------------------------------------------------------
+     6d77e8c3bf860f7cbe485a970972d4ae7899af090d81b6e7e14fb547950608ff56cbe2e3f6a38c57
+    (1 row)
+
+``ecdsa_verify(public_key text|bytea, input_data bytea, signature text|bytea, hash_func text, curve_name text)``
+................................................................................................................
+
+Verifies that ``public_key`` signed ``hash_func(input_data)`` with
+``signature`` using ``curve_name``.
+
+If ``public_key`` is ``text`` then it's assumed to be a hex string.
+
+If ``signature`` is ``text`` then it's assumed to be a hex string.
+
+Throws an error if ``curve_name`` is not valid (see ``ecdsa_is_valid_curve(curve_name)``).
+
+Throws an error if ``public_key`` is not valid (see ``ecdsa_is_valid_public_key(public_key)``).
+
+Equivalent to::
+
+    ecdsa_verify_raw(
+        decode(public_key, 'hex'),
+        digest(input_data, hash_func),
+        decode(private_key, 'hex'),
+        curve_name
+    );
+
+For example::
+
+    postgres=# select ecdsa_verify(
+    postgres-#     '696e6d4ab9411031b0b5d4237e6388c910b063c4e87d67acda388b32934446ac6cf41a8fe2a9572543dcefb1469c25fe640790b3926cde705cf2829a5c8d17a7',
+    postgres-#     'hello, world',
+    postgres-#     'db649d01ce8c8791eca671f95dbf228daeeaf37940148fe0e335511a376f3ca4bad32268ea3cbd069009a8605127003b2c0228d4ec63546d1425454664b25502',
+    postgres-#     'sha256',
+    postgres-#     'secp256k1'
+    postgres-# );
+     ecdsa_verify
+    --------------
+     t
+    (1 row)
+
+
+``ecdsa_is_valid_public_key(public_key text|bytea, curve_name text)``
+.....................................................................
+
+Returns ``true`` if ``public_key`` is a valid public key for
+``curve_name`` otherwise ``false``.
+
+If ``public_key`` is ``text`` then it's assumed to be a hex string.
+
+
+``ecdsa_is_valid_private_key(private_key text|bytea, curve_name text)``
+.......................................................................
+
+Returns ``true`` if ``private_key`` is a valid private key for
+``curve_name`` otherwise ``false``.
+
+If ``private_key`` is ``text`` then it's assumed to be a hex string.
+
+
+``ecdsa_is_valid_curve(curve_name text)``
+.........................................
+
+Returns ``true`` if ``curve_name`` is a valid curve, otherwise ``false``.
+
+Valid curves (as supported by uECC) are: ``'secp160r1'``, ``'secp192r1'``,
+``'secp224r1'``, ``'secp256r1'``, and ``'secp256k1'``.
+
+
+``ecdsa_make_key(curve_name text) -> (public_key_hex text, private_key_hex text)``
+----------------------------------------------------------------------------------
+
+Returns a row containing a new public and private key.
+
+For example::
+
+    postgres=# select ecdsa_make_key('secp256k1');
+          ecdsa_make_key
+    --------------------------
+     (0554...8094,ebb...bbc1)
+    (1 row)
+
+
+Raw APIs
+--------
+
+These APIs should only be used if you're quite certain that you want to call
+the ``ecdsa`` primitives directly without hashing the input data first.
+
+``ecdsa_sign_raw(private_key bytea, hash bytea, curve_name text)``
+..................................................................
+
+Signs ``hash`` with ``private_key`` using ``curve_name``.
+
+Throws an error if ``curve_name`` is not valid (see ``ecdsa_is_valid_curve(curve_name)``).
+
+Throws an error if ``private_key`` is not valid (see ``ecdsa_is_valid_public_key(public_key)``).
+
+**Note**: this function should almost certainly never be used directly, as it
+signs ``hash`` directly, and there can be cryptographic-security-related
+consequences if ``hash`` is not a hashed value. See ``ecdsa_sign``, which
+accepts and hashes arbitrary input data before passing it to
+``ecdsa_sign_raw``.
+
+
+``ecdsa_verify_raw(public_key bytea, input_hash bytea, signature bytea, curve_name text)``
+..........................................................................................
+
+Verifies that ``public_key`` signed ``input_hash`` with ``signature`` using
+``curve_name``.
+
+Throws an error if ``curve_name`` is not valid (see ``ecdsa_is_valid_curve(curve_name)``).
+
+Throws an error if ``public_key`` is not valid (see ``ecdsa_is_valid_public_key(public_key)``).
+
+**Note**: this function should almost certainly never be used directly, as it
+verifies ``input_hash`` directly, which is generally only used when
+``input_hash`` is a hashed value. See ``ecdsa_verify``, which accepts and
+hashes arbitrary data before passing it to ``ecdsa_verify_raw``.
+
+``ecdsa_make_key_raw(curve_name text) -> bytea[2]``
+...................................................
+
+Returns an ``ARRAY[public_key, private_key]``.
+
+**Note**: ``ecdsa_make_key`` presents a more friendly interface to this
+function.
+
+
+Cryptographic Security
+======================
+
+When necessary, random numbers are generated using ``CryptGenRandom`` on
+Windows, and either ``/dev/urandom`` or ``/dev/random`` on Unix. Routines
+requiring entropy will fail if these resources are unavailable.
+
+The ``*_raw`` functions should only be used if the caller is fully aware of the
+context they are being used in and the potential consequences of passing
+arbitrary values directly into ECC signing and unsigning functions. In almost
+every case, the non ``_raw`` versions of the functions should be used (the
+exception is ``ecdsa_make_key_raw``, which can be used directly if the result
+-- a ``bytea[2]`` -- is desired).
+
+
 Testing
 =======
 
@@ -119,175 +313,6 @@ The correctness of signing and unsigning can verified using OpenSSL:
 
     $ openssl dgst -ecdsa-with-SHA1 -verify /tmp/secp256k1-pub.pem -signature /tmp/signature.bin /tmp/to-verify.txt
     Verified OK
-
-
-Usage
-=====
-
-Use with::
-
-    > CREATE EXTENSION pgcrypto; -- pguecc uses pycrypto for hashing
-    CREATE EXTENSION;
-    > CREATE EXTENSION pguecc;
-    CREATE EXTENSION;
-    > SELECT ecdsa_sign('000000000000000000000000000000000000000000', '1234', 'sha256', 'secp160r1');
-                     ecdsa_sign
-    --------------------------------------------
-     \xea2eae6ccfee78f0ac8d2d8775e3853f7ac50def
-    (1 row)
-
-API
-===
-
-``ecdsa_sign_raw(private_key bytea, hash bytea, curve_name text)``
-
-    Signs ``hash`` with ``private_key`` using ``curve_name``.
-
-    Throws an error if ``curve_name`` is not valid (see ``ecdsa_is_valid_curve(curve_name)``).
-
-    Throws an error if ``private_key`` is not valid (see ``ecdsa_is_valid_public_key(public_key)``).
-
-    Note: this function should almost certainly never be used directly, as it
-    operates on the hash of the input data instead of the raw input data; see
-    ``ecdsa_sign``.
-
-``ecdsa_sign(private_key text|bytea, input_data bytea, hash_func text, curve_name text)``
-
-    Signs ``hash_func(input_data)``  using ``private_key``.
-    
-    If ``private_key`` is ``text``, then it's assumed to be a hex string (ie,
-    ``decode(private_key, 'hex')`` is called).
-
-    Throws an error if ``curve_name`` is not valid (see ``ecdsa_is_valid_curve(curve_name)``).
-
-    Throws an error if ``private_key`` is not valid (see ``ecdsa_is_valid_public_key(public_key)``).
-
-    The ``input_data`` are hashed using ``hash_func`` (ex, ``sha1`` or
-    ``sha256``) before being passed to ``ecdsa_sign_raw``.
-
-    Equivalent to::
-
-        ecdsa_sign_raw(
-            decode(private_key, 'hex'),
-            digest(input_data, hash_func),
-            curve_name
-        )
-
-    For example::
-
-        postgres=# select ecdsa_sign('000000000000000000000000000000000000000000', '1234', 'sha256', 'secp160r1');
-                                            ecdsa_sign                                    
-        ----------------------------------------------------------------------------------
-         6d77e8c3bf860f7cbe485a970972d4ae7899af090d81b6e7e14fb547950608ff56cbe2e3f6a38c57
-        (1 row)
-
-
-``ecdsa_verify_raw(public_key bytea, input_hash bytea, signature bytea, curve_name text)``
-
-    Verifies that ``public_key`` signed ``input_hash`` with ``signature`` using
-    ``curve_name``.
-
-    Note: this function should almost certainly never be used directly, as it
-    operates on the hash of the input data instead of the raw input data; see
-    ``ecdsa_verify``.
-
-    Throws an error if ``curve_name`` is not valid (see ``ecdsa_is_valid_curve(curve_name)``).
-
-    Throws an error if ``public_key`` is not valid (see ``ecdsa_is_valid_public_key(public_key)``).
-
-``ecdsa_verify(public_key text|bytea , input_data bytea, signature text|bytea, hash_func text, curve_name text)``
-
-    Verifies that ``public_key`` signed ``hash_func(input_data)`` with
-    ``signature`` using ``curve_name``.
-
-    If ``public_key`` is ``text`` then it's assumed to be a hex string.
-
-    If ``signature`` is ``text`` then it's assumed to be a hex string.
-
-    Throws an error if ``curve_name`` is not valid (see ``ecdsa_is_valid_curve(curve_name)``).
-
-    Throws an error if ``public_key`` is not valid (see ``ecdsa_is_valid_public_key(public_key)``).
-
-    Equivalent to::
-
-        ecdsa_verify_raw(
-            decode(public_key, 'hex'),
-            digest(input_data, hash_func),
-            decode(private_key, 'hex'),
-            curve_name
-        );
-
-    For example::
-
-        postgres=# select ecdsa_verify(
-        postgres-#     '696e6d4ab9411031b0b5d4237e6388c910b063c4e87d67acda388b32934446ac6cf41a8fe2a9572543dcefb1469c25fe640790b3926cde705cf2829a5c8d17a7',
-        postgres-#     'hello, world',
-        postgres-#     'db649d01ce8c8791eca671f95dbf228daeeaf37940148fe0e335511a376f3ca4bad32268ea3cbd069009a8605127003b2c0228d4ec63546d1425454664b25502',
-        postgres-#     'sha256',
-        postgres-#     'secp256k1'
-        postgres-# );
-         ecdsa_verify
-        --------------
-         t
-        (1 row)
-
-
-``ecdsa_is_valid_public_key(public_key text|bytea, curve_name text)``
-
-    Returns ``true`` if ``public_key`` is a valid public key for
-    ``curve_name`` otherwise ``false``.
-
-    If ``public_key`` is ``text`` then it's assumed to be a hex string.
-
-
-``ecdsa_is_valid_private_key(private_key text|bytea, curve_name text)``
-
-    Returns ``true`` if ``private_key`` is a valid private key for
-    ``curve_name`` otherwise ``false``.
-
-    If ``private_key`` is ``text`` then it's assumed to be a hex string.
-
-
-``ecdsa_is_valid_curve(curve_name text)``
-
-    Returns ``true`` if ``curve_name`` is a valid curve, otherwise ``false``.
-
-    Valid curves (as supported by uECC) are: ``'secp160r1'``, ``'secp192r1'``,
-    ``'secp224r1'``, ``'secp256r1'``, and ``'secp256k1'``.
-
-
-``ecdsa_make_key_raw(curve_name text) -> bytea[2]``
-
-    Returns an ``ARRAY[public_key, private_key]``.
-
-    Note: ``ecdsa_make_key`` presents a more friendly interface to this
-    function.
-
-``ecdsa_make_key(curve_name text) -> (public_key_hex text, private_key_hex text)``
-
-    Returns a row containing a new public and private key.
-
-    For example::
-
-        postgres=# select ecdsa_make_key('secp256k1');
-              ecdsa_make_key
-        --------------------------
-         (0554...8094,ebb...bbc1)
-        (1 row)
-
-Cryptographic Security
-======================
-
-When necessary, random numbers are generated using ``CryptGenRandom`` on
-Windows, and either ``/dev/urandom`` or ``/dev/random`` on Unix. Routines
-requiring entropy will fail if these resources are unavailable.
-
-The ``*_raw`` functions should only be used if the caller is fully aware of the
-context they are being used in and the potential consequences of passing
-arbitrary values directly into ECC signing and unsigning functions. In almost
-every case, the non ``_raw`` versions of the functions should be used (the
-exception is ``ecdsa_make_key_raw``, which can be used directly if the result
--- a ``bytea[2]`` -- is desired).
 
 Credit
 ======
