@@ -1,3 +1,13 @@
+``pguecc`` - Postgres Bindings for the ``micro-ecc`` Elliptic Curve Cryptography library
+========================================================================================
+
+``pguecc`` exposes the elliptic curve cryptographic primitives from
+`micro-ecc`__ to Postgres.
+
+Note: currently only key generation and signing is supported.
+
+__ https://github.com/kmackay/micro-ecc
+
 Installation
 ============
 
@@ -314,7 +324,7 @@ The correctness of signing and unsigning can verified using OpenSSL:
     $ openssl dgst -ecdsa-with-SHA1 -verify /tmp/secp256k1-pub.pem -signature /tmp/signature.bin /tmp/to-verify.txt
     Verified OK
 
-Credit
+Author
 ======
 
 Authored by David Wolever: https://github.com/wolever / https://twitter.com/wolever
