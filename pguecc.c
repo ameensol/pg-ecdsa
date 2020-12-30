@@ -14,6 +14,17 @@ PG_MODULE_MAGIC;
 #define VARDATA_char(x) ((char *)VARDATA(x))
 #define VARDATA_uint8(x) ((uint8_t *)VARDATA(x))
 
+#define _DO_PRAGMA(x) _Pragma(#x)
+
+// Note: "GCC" works for both gcc and clang
+#define PGUECC_DISABLE_WARNING(x) \
+	_DO_PRAGMA(GCC diagnostic push); \
+	_DO_PRAGMA(GCC diagnostic ignored x)
+
+#define PGUECC_ENABLE_WARNING() \
+	_DO_PRAGMA(GCC diagnostic pop)
+
+
 static const struct uECC_Curve_t *
 get_curve_by_name(const char *name, size_t name_len) {
 	if (strncmp(name, "secp160r1", name_len) == 0)
@@ -202,8 +213,10 @@ pg_ecdsa_make_key_raw(PG_FUNCTION_ARGS)
 
 	// nb: these can be stack-allocated because construct_md_array will copy
 	//	   them into the result.
+	PGUECC_DISABLE_WARNING("-Wvla");
 	char pub_key[uECC_curve_public_key_size(curve) + VARHDRSZ];
 	char prv_key[uECC_curve_private_key_size(curve) + VARHDRSZ];
+	PGUECC_ENABLE_WARNING();
 	bytea *keys[2] = { (bytea *)&pub_key, (bytea *)&prv_key };
 
 	int ok = uECC_make_key(VARDATA_uint8(pub_key), VARDATA_uint8(prv_key), curve);
