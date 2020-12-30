@@ -7,5 +7,6 @@ OBJS = $(SRCS:.c=.o)
 REGRESS = pguecc_test_raw pguecc_test_public
 
 PG_CONFIG = pg_config
+PG_CPPFLAGS = -Wno-vla -Wno-declaration-after-statement -Wno-missing-prototypes
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
