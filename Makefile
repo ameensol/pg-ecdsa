@@ -1,6 +1,6 @@
 MODULE_big = pguecc
 EXTENSION = pguecc
-DATA = pguecc--1.0.sql
+DATA =  pguecc--1.0.sql pguecc--2.0.sql
 DOCS = README.rst
 SRCS = pguecc.c micro-ecc-601bd1/uECC.c
 OBJS = $(SRCS:.c=.o)
